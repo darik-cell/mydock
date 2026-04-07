@@ -1,3 +1,4 @@
+import AppKit
 import Carbon
 import Foundation
 
@@ -8,10 +9,14 @@ enum HotkeyAction: Hashable {
 
 final class HotkeyManager {
     var onAction: ((HotkeyAction) -> Void)?
+    var onOptionReleased: (() -> Void)?
 
     private var hotKeyRefs: [EventHotKeyRef?] = []
     private var eventHandlerRef: EventHandlerRef?
     private var lastInvocationByAction: [HotkeyAction: TimeInterval] = [:]
+    private var globalFlagsMonitor: Any?
+    private var localFlagsMonitor: Any?
+    private var isOptionPressed = false
 
     func start() {
         stop()
@@ -48,6 +53,14 @@ final class HotkeyManager {
         }
 
         registerHotkey(keyCode: UInt32(kVK_ANSI_D), identifier: 100)
+
+        globalFlagsMonitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+        }
+        localFlagsMonitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.handleFlagsChanged(event)
+            return event
+        }
     }
 
     func stop() {
@@ -62,6 +75,18 @@ final class HotkeyManager {
             RemoveEventHandler(eventHandlerRef)
             self.eventHandlerRef = nil
         }
+
+        if let globalFlagsMonitor {
+            NSEvent.removeMonitor(globalFlagsMonitor)
+            self.globalFlagsMonitor = nil
+        }
+
+        if let localFlagsMonitor {
+            NSEvent.removeMonitor(localFlagsMonitor)
+            self.localFlagsMonitor = nil
+        }
+
+        isOptionPressed = false
     }
 
     private func registerHotkey(keyCode: UInt32, identifier: UInt32) {
@@ -112,6 +137,15 @@ final class HotkeyManager {
         lastInvocationByAction[action] = timestamp
         onAction?(action)
         return noErr
+    }
+
+    private func handleFlagsChanged(_ event: NSEvent) {
+        let optionPressed = event.modifierFlags.contains(.option)
+        if isOptionPressed && !optionPressed {
+            onOptionReleased?()
+        }
+
+        isOptionPressed = optionPressed
     }
 
     private func action(for identifier: UInt32) -> HotkeyAction? {

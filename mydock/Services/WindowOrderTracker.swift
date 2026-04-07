@@ -1,8 +1,11 @@
+import CoreGraphics
 import Foundation
+import OSLog
 
 final class WindowOrderTracker {
     private var cycleState = WindowCycleState()
     private var nextSequenceNumber = 0
+    private let logger = Logger(subsystem: "com.alex.mydock", category: "WindowCycle")
 
     func sync(with windows: [WindowIdentity]) {
         let windowsByApp = Dictionary(grouping: windows, by: \.appIdentifier)
@@ -13,17 +16,7 @@ final class WindowOrderTracker {
                 continue
             }
 
-            let sortedCurrentWindows = appWindows.sorted { lhs, rhs in
-                if lhs.cgWindowID != rhs.cgWindowID {
-                    return lhs.cgWindowID < rhs.cgWindowID
-                }
-
-                if lhs.bounds.minX != rhs.bounds.minX {
-                    return lhs.bounds.minX < rhs.bounds.minX
-                }
-
-                return lhs.bounds.minY < rhs.bounds.minY
-            }
+            let currentWindows = appWindows
 
             var appState = cycleState.appStates[appIdentifier]
             if appState?.appPID != appPID {
@@ -32,18 +25,21 @@ final class WindowOrderTracker {
                     appPID: appPID,
                     orderedEntries: [],
                     nextIndex: 0,
-                    lastResolvedWindowID: nil,
+                    lastResolvedWindowIdentifier: nil,
                     lastCycleAt: nil
                 )
             }
 
             var orderedEntries = appState?.orderedEntries.filter { entry in
-                sortedCurrentWindows.contains(entry.identity)
+                currentWindows.contains(entry.identity)
             } ?? []
+            let previousWindowIDs = orderedEntries.map(\.identity.runtimeIdentifier)
             let knownWindows = Set(orderedEntries.map(\.identity))
+            var newlyAddedWindowIDs: [Int] = []
 
-            for window in sortedCurrentWindows where !knownWindows.contains(window) {
+            for window in currentWindows where !knownWindows.contains(window) {
                 nextSequenceNumber += 1
+                newlyAddedWindowIDs.append(window.runtimeIdentifier)
                 orderedEntries.append(
                     WindowCycleEntry(
                         identity: window,
@@ -59,10 +55,13 @@ final class WindowOrderTracker {
 
             var nextIndex = appState?.nextIndex ?? 0
             nextIndex = normalized(nextIndex, count: orderedEntries.count)
+            let removedWindowIDs = previousWindowIDs.filter { previousID in
+                !orderedEntries.contains(where: { $0.identity.runtimeIdentifier == previousID })
+            }
 
-            if let lastResolvedWindowID = appState?.lastResolvedWindowID,
-               !orderedEntries.contains(where: { $0.identity.cgWindowID == lastResolvedWindowID }) {
-                appState?.lastResolvedWindowID = nil
+            if let lastResolvedWindowIdentifier = appState?.lastResolvedWindowIdentifier,
+               !orderedEntries.contains(where: { $0.identity.runtimeIdentifier == lastResolvedWindowIdentifier }) {
+                appState?.lastResolvedWindowIdentifier = nil
             }
 
             nextAppStates[appIdentifier] = AppWindowCycleState(
@@ -70,8 +69,13 @@ final class WindowOrderTracker {
                 appPID: appPID,
                 orderedEntries: orderedEntries,
                 nextIndex: nextIndex,
-                lastResolvedWindowID: appState?.lastResolvedWindowID,
+                lastResolvedWindowIdentifier: appState?.lastResolvedWindowIdentifier,
                 lastCycleAt: appState?.lastCycleAt
+            )
+
+            let orderedWindowIDs = orderedEntries.map(\.identity.runtimeIdentifier)
+            logger.notice(
+                "Cycle sync app=\(appIdentifier, privacy: .public) pid=\(appPID, privacy: .public) windows=\(orderedWindowIDs.count, privacy: .public) nextIndex=\(nextIndex, privacy: .public) added=\(String(describing: newlyAddedWindowIDs), privacy: .public) removed=\(String(describing: removedWindowIDs), privacy: .public) ordered=\(String(describing: orderedWindowIDs), privacy: .public)"
             )
         }
 
@@ -99,10 +103,18 @@ final class WindowOrderTracker {
             return
         }
 
-        appState.lastResolvedWindowID = resolvedWindow.cgWindowID
+        let previousIndex = appState.nextIndex
+        appState.lastResolvedWindowIdentifier = resolvedWindow.runtimeIdentifier
         appState.lastCycleAt = Date()
         appState.nextIndex = normalized(appState.nextIndex + 1, count: appState.orderedEntries.count)
         cycleState.appStates[appIdentifier] = appState
+        logger.notice(
+            "Cycle cursor advanced app=\(appIdentifier, privacy: .public) pid=\(pid, privacy: .public) resolvedWindow=\(resolvedWindow.runtimeIdentifier, privacy: .public) fromIndex=\(previousIndex, privacy: .public) toIndex=\(appState.nextIndex, privacy: .public)"
+        )
+    }
+
+    func state(for appIdentifier: String, pid: pid_t) -> AppWindowCycleState? {
+        validState(for: appIdentifier, pid: pid)
     }
 
     private func validState(for appIdentifier: String, pid: pid_t) -> AppWindowCycleState? {

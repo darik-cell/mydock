@@ -1,24 +1,58 @@
 import AppKit
+import OSLog
 
 @MainActor
 final class AppCoordinator: NSObject {
+    private struct HotkeyCycleSession {
+        private(set) var lastSlotIndex: Int?
+        private(set) var repeatCount = 0
+
+        mutating func beginSlot(_ slotIndex: Int) {
+            lastSlotIndex = slotIndex
+            repeatCount = 0
+        }
+
+        mutating func reset() {
+            lastSlotIndex = nil
+            repeatCount = 0
+        }
+
+        mutating func cycleIndex(for slotIndex: Int, windowCount: Int) -> Int {
+            guard windowCount > 0 else {
+                reset()
+                return 0
+            }
+
+            if lastSlotIndex == slotIndex {
+                repeatCount += 1
+            } else {
+                lastSlotIndex = slotIndex
+                repeatCount = 0
+            }
+
+            return repeatCount % windowCount
+        }
+    }
+
     private let preferencesStore = PreferencesStore()
     private let visibilityController = DockVisibilityController()
     private let runningAppsService = RunningAppsService()
     private let windowSnapshotService = WindowSnapshotService()
-    private let windowIdentityResolver = WindowIdentityResolver()
     private let windowOrderTracker = WindowOrderTracker()
     private let accessibilityPermissionService = AccessibilityPermissionService()
+    private lazy var axWindowSnapshotService = AXWindowSnapshotService(permissionService: accessibilityPermissionService)
     private lazy var windowFocusService = WindowFocusService(permissionService: accessibilityPermissionService)
     private let modelBuilder = DockModelBuilder()
     private let hotkeyManager = HotkeyManager()
     private let panelController = DockPanelController()
     private let preferencesWindowController = PreferencesWindowController()
     private let stateStore: AppStateStore
+    private let logger = Logger(subsystem: "com.alex.mydock", category: "Hotkeys")
 
     private var workspaceObservers: [NSObjectProtocol] = []
     private var refreshTimer: Timer?
     private var isRefreshing = false
+    private var hotkeyCycleSession = HotkeyCycleSession()
 
     override init() {
         let preferencesSnapshot = preferencesStore.snapshot
@@ -59,6 +93,9 @@ final class AppCoordinator: NSObject {
 
         hotkeyManager.onAction = { [weak self] action in
             self?.handle(hotkeyAction: action)
+        }
+        hotkeyManager.onOptionReleased = { [weak self] in
+            self?.hotkeyCycleSession.reset()
         }
         visibilityController.start()
         hotkeyManager.start()
@@ -137,15 +174,12 @@ final class AppCoordinator: NSObject {
         let runningApps = runningAppsService.snapshot()
         let visibleWindowSnapshots = windowSnapshotService.visibleWindowSnapshots()
         let visibleWindowCounts = windowSnapshotService.visibleWindowCounts(from: visibleWindowSnapshots)
-        let visibleWindowIdentities = windowIdentityResolver.resolve(
-            snapshots: visibleWindowSnapshots,
-            runningApps: runningApps
-        )
+        let cycleWindowIdentities = axWindowSnapshotService.cycleWindowIdentities(for: runningApps)
         let pinnedInstallations = runningAppsService.resolveInstalledApplications(
             bundleIdentifiers: stateStore.configuration.pinnedBundleIdentifiers
         )
 
-        windowOrderTracker.sync(with: visibleWindowIdentities)
+        windowOrderTracker.sync(with: cycleWindowIdentities)
 
         let result = modelBuilder.build(
             configuration: stateStore.configuration,
@@ -192,26 +226,47 @@ final class AppCoordinator: NSObject {
             let appIdentifier = item.appIdentifier,
             let processIdentifier = item.processIdentifier
         else {
+            hotkeyCycleSession.beginSlot(item.slotIndex)
+            logger.notice(
+                "Hotkey fallback to app activation for slot=\(item.slotIndex + 1, privacy: .public) app=\(item.displayName, privacy: .public) running=\(item.runningApplication != nil, privacy: .public)"
+            )
             activate(item: item)
             return
         }
 
         let orderedWindows = windowOrderTracker.orderedWindows(for: appIdentifier, pid: processIdentifier)
-        guard orderedWindows.count > 1, let targetWindow = windowOrderTracker.nextWindow(for: appIdentifier, pid: processIdentifier) else {
+        guard orderedWindows.count > 1 else {
+            hotkeyCycleSession.beginSlot(item.slotIndex)
+            logger.notice(
+                "Hotkey single-window activation for slot=\(item.slotIndex + 1, privacy: .public) app=\(item.displayName, privacy: .public) windows=\(orderedWindows.count, privacy: .public)"
+            )
             activate(item: item)
             return
         }
 
-        switch windowFocusService.focus(window: targetWindow, in: runningApplication) {
+        let targetIndex = hotkeyCycleSession.cycleIndex(for: item.slotIndex, windowCount: orderedWindows.count)
+        let targetWindow = orderedWindows[targetIndex]
+
+        let windowList = orderedWindows
+            .map { "\($0.runtimeIdentifier):\($0.normalizedTitle)" }
+            .joined(separator: ", ")
+        logger.notice(
+            "Hotkey cycle attempt slot=\(item.slotIndex + 1, privacy: .public) app=\(item.displayName, privacy: .public) pid=\(processIdentifier, privacy: .public) cycleIndex=\(targetIndex, privacy: .public) targetWindow=\(targetWindow.runtimeIdentifier, privacy: .public) orderedWindows=[\(windowList, privacy: .public)]"
+        )
+
+        let result = windowFocusService.focus(window: targetWindow, in: runningApplication)
+        logger.notice(
+            "Hotkey cycle result slot=\(item.slotIndex + 1, privacy: .public) app=\(item.displayName, privacy: .public) targetWindow=\(targetWindow.runtimeIdentifier, privacy: .public) result=\(String(describing: result), privacy: .public)"
+        )
+
+        switch result {
         case .focusedTargetWindow:
-            windowOrderTracker.advanceCursor(
-                for: appIdentifier,
-                pid: processIdentifier,
-                resolvedWindow: targetWindow
-            )
+            break
         case .permissionRequired:
+            hotkeyCycleSession.reset()
             accessibilityPermissionService.requestIfNeeded()
         case .activatedApplication:
+            hotkeyCycleSession.reset()
             break
         }
     }

@@ -28,11 +28,10 @@
 		A10000010000000000000016 /* PreferencesWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000019 /* PreferencesWindowController.swift */; };
 		A10000010000000000000017 /* WindowIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000020 /* WindowIdentity.swift */; };
 		A10000010000000000000018 /* WindowCycleState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000021 /* WindowCycleState.swift */; };
-		A10000010000000000000019 /* WindowIdentityResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000022 /* WindowIdentityResolver.swift */; };
 		A1000001000000000000001A /* WindowOrderTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000023 /* WindowOrderTracker.swift */; };
 		A1000001000000000000001B /* AccessibilityPermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000024 /* AccessibilityPermissionService.swift */; };
-		A1000001000000000000001C /* WindowAXMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000025 /* WindowAXMatcher.swift */; };
 		A1000001000000000000001D /* WindowFocusService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000026 /* WindowFocusService.swift */; };
+		A1000001000000000000001E /* AXWindowSnapshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000027 /* AXWindowSnapshotService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,11 +59,10 @@
 		A10000020000000000000019 /* PreferencesWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesWindowController.swift; sourceTree = "<group>"; };
 		A10000020000000000000020 /* WindowIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowIdentity.swift; sourceTree = "<group>"; };
 		A10000020000000000000021 /* WindowCycleState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowCycleState.swift; sourceTree = "<group>"; };
-		A10000020000000000000022 /* WindowIdentityResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowIdentityResolver.swift; sourceTree = "<group>"; };
 		A10000020000000000000023 /* WindowOrderTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowOrderTracker.swift; sourceTree = "<group>"; };
 		A10000020000000000000024 /* AccessibilityPermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessibilityPermissionService.swift; sourceTree = "<group>"; };
-		A10000020000000000000025 /* WindowAXMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowAXMatcher.swift; sourceTree = "<group>"; };
 		A10000020000000000000026 /* WindowFocusService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowFocusService.swift; sourceTree = "<group>"; };
+		A10000020000000000000027 /* AXWindowSnapshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AXWindowSnapshotService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -144,11 +142,10 @@
 				A1000002000000000000000C /* HotkeyManager.swift */,
 				A10000020000000000000014 /* PreferencesStore.swift */,
 				A10000020000000000000015 /* DockVisibilityController.swift */,
-				A10000020000000000000022 /* WindowIdentityResolver.swift */,
 				A10000020000000000000023 /* WindowOrderTracker.swift */,
 				A10000020000000000000024 /* AccessibilityPermissionService.swift */,
-				A10000020000000000000025 /* WindowAXMatcher.swift */,
 				A10000020000000000000026 /* WindowFocusService.swift */,
+				A10000020000000000000027 /* AXWindowSnapshotService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -247,11 +244,10 @@
 				A1000001000000000000000C /* HotkeyManager.swift in Sources */,
 				A10000010000000000000011 /* PreferencesStore.swift in Sources */,
 				A10000010000000000000012 /* DockVisibilityController.swift in Sources */,
-				A10000010000000000000019 /* WindowIdentityResolver.swift in Sources */,
 				A1000001000000000000001A /* WindowOrderTracker.swift in Sources */,
 				A1000001000000000000001B /* AccessibilityPermissionService.swift in Sources */,
-				A1000001000000000000001C /* WindowAXMatcher.swift in Sources */,
 				A1000001000000000000001D /* WindowFocusService.swift in Sources */,
+				A1000001000000000000001E /* AXWindowSnapshotService.swift in Sources */,
 				A1000001000000000000000D /* DockPanelView.swift in Sources */,
 				A1000001000000000000000E /* DockItemView.swift in Sources */,
 				A10000010000000000000016 /* PreferencesWindowController.swift in Sources */,

@@ -11,7 +11,7 @@ struct AppWindowCycleState {
     let appPID: pid_t
     var orderedEntries: [WindowCycleEntry]
     var nextIndex: Int
-    var lastResolvedWindowID: CGWindowID?
+    var lastResolvedWindowIdentifier: Int?
     var lastCycleAt: Date?
 }
 

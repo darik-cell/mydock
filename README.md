@@ -43,7 +43,9 @@ Hotkey behavior:
 - Empty slots do nothing
 - If the slot points to a stopped pinned app, `mydock` launches it
 - If the slot has one visible window, `mydock` activates the app as before
-- If the slot has multiple visible windows, repeated `Option+num` presses use the stored runtime cycle order for that app
+- If the slot has multiple visible windows, the first press in the current `Option` hold focuses the first window in that app's stored order
+- Repeated presses of the same slot while `Option` is still held advance through that app's window order
+- Switching to another slot while still holding `Option` resets the per-slot cycle back to the first window for the newly selected app
 
 ## Window Cycling
 
@@ -51,19 +53,21 @@ Hotkey behavior:
 
 Rules:
 
-- Only windows that pass the same visibility rules as the dock participate in the cycle
-- Order is determined by the first time a window is observed by `mydock` during the current runtime session
+- Dock visibility and dot counts still come from Core Graphics window snapshots
+- Exact cycling order comes from Accessibility window enumeration for the running app
+- Only non-minimized AX windows from regular, non-hidden apps participate in the cycle
+- Order is determined by the first time an AX window is observed by `mydock` during the current runtime session
 - New windows are appended to the end of the app's cycle
 - Closed or no-longer-eligible windows are removed from the cycle
-- Cycle cursor changes only after a successful hotkey-driven exact window focus
-- Manual window changes by the user do not reorder windows and do not move the cycle cursor
-- Leaving the app, using `cmd+tab`, Mission Control, or clicking another window does not reset the cycle cursor by itself
+- The stored window order is stable, but the current cycle position is scoped to the current `Option` hold session
+- Manual window changes by the user do not reorder windows
+- Releasing `Option` resets repeated-slot cycling back to the first window for the next hotkey sequence
 
 Practical meaning:
 
-- The cycle state is stable within the current `mydock` runtime session
+- The window order is stable within the current `mydock` runtime session
 - If the application disappears and later comes back with a new runtime session, the cycle is rebuilt
-- If `mydock` starts after several windows are already open, public APIs do not expose their true historical creation order; in that case `mydock` seeds initial order by first observation and `CGWindowID`
+- If `mydock` starts after several windows are already open, public APIs still do not expose their true historical creation order; in that case `mydock` seeds initial order by first AX observation order
 
 ## Pin / Unpin
 
@@ -113,18 +117,15 @@ Practical meaning:
 To focus a specific window, `mydock` uses a best-effort pipeline:
 
 - activate the target application
-- query the app's AX window list
-- match the target snapshot window to an AX window by app pid, title, and bounds
-- raise and focus the matched AX window
+- reuse the exact AX window element stored in the runtime cycle state
+- raise and focus that AX window
+- verify that `kAXFocusedWindowAttribute` now points to the same AX window
 
-Matching heuristics:
+Practical meaning:
 
-- exact title match has the highest priority
-- close bounds match has high priority
-- empty-title windows fall back mostly to bounds
-- if matching is ambiguous, the best-scoring candidate is used
-
-This is usually reliable for IDEs, browsers, and terminal apps with stable titles and window geometry. Apps with duplicate titles, unusual AX metadata, or custom window systems can still degrade to best effort.
+- `mydock` no longer relies on Core Graphics to Accessibility window matching for cycle focus
+- This is more reliable for apps like IDEA where multiple windows may have identical bounds and empty Core Graphics titles
+- Exact focus is still best effort if the app exposes incomplete or unusual Accessibility metadata
 
 ## Mission Control behavior
 
@@ -147,11 +148,10 @@ Implementation note:
 - `DockVisibilityController`: separates manual visibility from temporary Mission Control hiding
 - `RunningAppsService`: snapshots running apps and resolves installed bundles
 - `WindowSnapshotService`: snapshots visible Core Graphics windows
-- `WindowIdentityResolver`: enriches visible snapshots with app identity for cycle tracking
-- `WindowOrderTracker`: stores per-app runtime window order and cycle cursor
+- `AXWindowSnapshotService`: enumerates Accessibility windows for the cycle runtime state
+- `WindowOrderTracker`: stores per-app runtime window order
 - `AccessibilityPermissionService`: checks and prompts for AX permission when exact focus is needed
-- `WindowAXMatcher`: matches a tracked Core Graphics window to an AX window candidate
-- `WindowFocusService`: activates the app and focuses a specific AX window when possible
+- `WindowFocusService`: activates the app and focuses a tracked AX window when possible
 - `DockModelBuilder`: merges pinned apps, running apps, and visible-window counts into UI-ready slots
 - `AppStateStore`: keeps dock items, dynamic ordering, panel visibility, and live layout settings
 - `DockPanelView` / `DockItemView`: AppKit panel UI, context menus, badges, and hover state
@@ -159,7 +159,7 @@ Implementation note:
 ## Known limitations
 
 - True historical open order for windows that were already present before `mydock` started is not recoverable from public APIs
-- Only windows that pass the dock visibility heuristics participate in cycling
+- Only windows that have usable Accessibility window entries participate in cycling
 - Exact focus is best effort and depends on Accessibility metadata quality for the target app
 - Mission Control detection is heuristic-based
 - Multi-monitor placement is still basic and uses the current main screen
@@ -176,9 +176,7 @@ Implementation note:
 - Window cycle state: [WindowCycleState.swift](/Users/alex/mydock/mydock/Models/WindowCycleState.swift)
 - Preferences persistence: [PreferencesStore.swift](/Users/alex/mydock/mydock/Services/PreferencesStore.swift)
 - Visibility coordination: [DockVisibilityController.swift](/Users/alex/mydock/mydock/Services/DockVisibilityController.swift)
-- Window identity enrichment: [WindowIdentityResolver.swift](/Users/alex/mydock/mydock/Services/WindowIdentityResolver.swift)
+- AX cycle source: [AXWindowSnapshotService.swift](/Users/alex/mydock/mydock/Services/AXWindowSnapshotService.swift)
 - Window order tracking: [WindowOrderTracker.swift](/Users/alex/mydock/mydock/Services/WindowOrderTracker.swift)
 - Accessibility permission check: [AccessibilityPermissionService.swift](/Users/alex/mydock/mydock/Services/AccessibilityPermissionService.swift)
-- AX matching: [WindowAXMatcher.swift](/Users/alex/mydock/mydock/Services/WindowAXMatcher.swift)
 - Exact window focus: [WindowFocusService.swift](/Users/alex/mydock/mydock/Services/WindowFocusService.swift)
-# mydock

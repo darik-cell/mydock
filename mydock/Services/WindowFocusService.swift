@@ -11,15 +11,10 @@ enum WindowFocusResult {
 
 final class WindowFocusService {
     private let permissionService: AccessibilityPermissionService
-    private let matcher: WindowAXMatcher
     private let logger = Logger(subsystem: "com.alex.mydock", category: "WindowFocus")
 
-    init(
-        permissionService: AccessibilityPermissionService,
-        matcher: WindowAXMatcher = WindowAXMatcher()
-    ) {
+    init(permissionService: AccessibilityPermissionService) {
         self.permissionService = permissionService
-        self.matcher = matcher
     }
 
     func focus(window target: WindowIdentity, in runningApplication: NSRunningApplication) -> WindowFocusResult {
@@ -31,14 +26,19 @@ final class WindowFocusService {
         }
 
         let applicationElement = AXUIElementCreateApplication(target.appPID)
-        guard let windowElement = matcher.bestMatch(for: target, applicationElement: applicationElement) else {
-            logger.notice("No AX window match for \(target.appName, privacy: .public) window \(target.cgWindowID)")
+        let windowElement = target.element.element
+
+        guard focus(windowElement: windowElement, in: applicationElement) else {
+            logger.notice("AX focus actions failed for \(target.appName, privacy: .public) window \(target.runtimeIdentifier, privacy: .public)")
             return .activatedApplication
         }
 
-        return focus(windowElement: windowElement, in: applicationElement)
-            ? .focusedTargetWindow
-            : .activatedApplication
+        let didVerifyFocusedWindow = verifyFocusedWindow(windowElement: windowElement, in: applicationElement)
+        logger.notice(
+            "AX focus verification app=\(target.appName, privacy: .public) targetWindow=\(target.runtimeIdentifier, privacy: .public) title=\(target.normalizedTitle, privacy: .public) verified=\(didVerifyFocusedWindow, privacy: .public)"
+        )
+
+        return didVerifyFocusedWindow ? .focusedTargetWindow : .activatedApplication
     }
 
     private func focus(windowElement: AXUIElement, in applicationElement: AXUIElement) -> Bool {
@@ -62,5 +62,26 @@ final class WindowFocusService {
         }
 
         return didFocus
+    }
+
+    private func verifyFocusedWindow(windowElement: AXUIElement, in applicationElement: AXUIElement) -> Bool {
+        guard let focusedWindow = copyAttributeValue(
+            for: applicationElement,
+            attribute: kAXFocusedWindowAttribute as CFString
+        ) else {
+            return false
+        }
+
+        return CFEqual(focusedWindow, windowElement)
+    }
+
+    private func copyAttributeValue(for element: AXUIElement, attribute: CFString) -> CFTypeRef? {
+        var value: CFTypeRef?
+        let result = AXUIElementCopyAttributeValue(element, attribute, &value)
+        guard result == .success else {
+            return nil
+        }
+
+        return value
     }
 }
